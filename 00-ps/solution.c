@@ -11,8 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-const size_t argv_pos = 48; // numeration from 1
-
 bool is_pid(char* str, pid_t* pid) {
 	*pid = 0;
 	for (size_t i = 0; str[i] != '\0'; ++i) {
@@ -25,13 +23,14 @@ bool is_pid(char* str, pid_t* pid) {
 }
 
 char** read_string_file(char* path, char* buf, size_t* size) {
+	const size_t ARGS_BUF_SIZE = *size;
 	int fd = open(path, O_RDONLY);
 	if (fd == -1) {
 		return NULL;
 	}
 
 	*size = 0;
-	for (size_t bytes_read = 0; (bytes_read = read(fd, buf + *size, sysconf(_SC_ARG_MAX) - *size)); *size += bytes_read) {}
+	for (size_t bytes_read = 0; (bytes_read = read(fd, buf + *size, ARGS_BUF_SIZE - *size)) > 0; *size += bytes_read) {}
 
 	size_t strs_count = 0; // for NULL
 	for (size_t i = 0; i < *size; ++i) {
@@ -58,7 +57,8 @@ void ps(void) {
 	}
 	char* path = fs_xmalloc(PATH_MAX);
 	char* exe = fs_xmalloc(PATH_MAX);
-	char* buf = fs_xmalloc(sysconf(_SC_ARG_MAX));
+	const size_t ARGS_BUF_SIZE = sysconf(_SC_ARG_MAX);
+	char* buf = fs_xmalloc(ARGS_BUF_SIZE);
 	struct dirent* file;
 	while ((file = readdir(proc))) {
 		char* filename = file->d_name;
@@ -75,7 +75,7 @@ void ps(void) {
 
 		sprintf(path, "/proc/%s/cmdline", filename);
 		char** argv;
-		size_t size = 0;
+		size_t size = ARGS_BUF_SIZE;
 		if (!(argv = read_string_file(path, buf, &size))) {
 			report_error(path, errno);
 			continue;
@@ -83,7 +83,9 @@ void ps(void) {
 
 		char** envp;
 		sprintf(path, "/proc/%s/environ", filename);
-		if (!(envp = read_string_file(path, buf + size, &size))) {
+		char* ptr = buf + size;
+		size = ARGS_BUF_SIZE - size;
+		if (!(envp = read_string_file(path, ptr, &size))) {
 			report_error(path, errno);
 			fs_xfree(argv);
 			continue;

@@ -9,6 +9,7 @@
 #include <string.h>
 #include <unistd.h>
 
+// FOR EXPERIMENT
 
 bool is_number(char* str) {
 	for (size_t i = 0; str[i] != '\0'; ++i) {

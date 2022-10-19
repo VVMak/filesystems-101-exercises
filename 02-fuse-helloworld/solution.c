@@ -99,7 +99,7 @@ int hello_read(const char* path, char* buf, size_t size, off_t offset,
 	if (offset > (off_t)size) {
 		return 0;
 	}
-	sprintf(hello_content, hello_content_format, fuse_get_context()->uid);
+	sprintf(hello_content, hello_content_format, fuse_get_context()->pid);
 	size = (size <= strlen(hello_content) - offset ? size : strlen(hello_content) - offset);
 	memcpy(buf, hello_content + offset, size);
 	return size;

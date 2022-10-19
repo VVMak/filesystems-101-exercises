@@ -84,7 +84,7 @@ int hello_open(const char* path, struct fuse_file_info* fi) {
 	if (strcmp(path, hello_file_path) != 0)
 		return -ENOENT;
 	if ((fi->flags & O_ACCMODE) != O_RDONLY)
-		return -EACCES;
+		return -EROFS;
 	return 0;
 }
 

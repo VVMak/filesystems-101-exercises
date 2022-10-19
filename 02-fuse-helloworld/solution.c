@@ -10,7 +10,8 @@
 const char* hello_file_path = "/hello";
 const char* hello_content_format = "hello, %d\n";
 
-int hello_getattr(const char* path, struct stat* st, struct fuse_file_info*) {
+int hello_getattr(const char* path, struct stat* st, struct fuse_file_info* fi) {
+	(void)fi;
 	memset(st, 0, sizeof(struct stat));
 	if (strcmp(path, "/") == 0) {
 		st->st_mode = S_IFDIR | 0755;
@@ -26,46 +27,56 @@ int hello_getattr(const char* path, struct stat* st, struct fuse_file_info*) {
 	return -ENOENT;
 }
 
-int hello_readlink(const char* path, char*, size_t) {
+int hello_readlink(const char* path, char* buf, size_t size) {
+	(void)buf; (void)size;
 	if (strcmp(path, "/") || strcmp(path, hello_file_path)) {
 		return -EINVAL;
 	}
 	return -ENOENT;
 }
 
-int hello_mknod(const char*, mode_t, dev_t) {
+int hello_mknod(const char* path, mode_t mode, dev_t fl) {
+	(void)path; (void)mode; (void)fl;
 	return -EROFS;
 }
 
-int hello_mkdir(const char*, mode_t) {
+int hello_mkdir(const char* path, mode_t mode) {
+	(void)path; (void)mode;
 	return -EROFS;
 }
 
-int hello_unlink(const char*) {
+int hello_unlink(const char* path) {
+	(void)path;
 	return -EROFS;
 }
 
-int hello_symlink(const char *, const char *) {
+int hello_symlink(const char* target, const char* linkpath) {
+	(void)target; (void)linkpath;
 	return -EROFS;
 }
 
-int hello_rename(const char *, const char *, unsigned int) {
+int hello_rename(const char* oldpath, const char* newpath, unsigned int fl) {
+	(void)oldpath; (void)newpath; (void)fl;
 	return -EROFS;
 }
 
-int hello_link(const char *, const char *) {
+int hello_link(const char* target, const char* linkpath) {
+	(void)target; (void)linkpath;
 	return -EROFS;
 }
 
-int hello_chmod(const char *, mode_t, struct fuse_file_info *) {
+int hello_chmod(const char* path, mode_t mode, struct fuse_file_info* fi) {
+	(void)path; (void)mode; (void)fi;
 	return -EROFS;
 }
 
-int hello_chown(const char *, uid_t, gid_t, struct fuse_file_info *) {
+int hello_chown(const char* path, uid_t uid, gid_t gid, struct fuse_file_info* fi) {
+	(void)path; (void)uid; (void)gid; (void)fi;
 	return -EROFS;
 }
 
-int hello_truncate(const char *, off_t, struct fuse_file_info *) {
+int hello_truncate(const char* path, off_t size, struct fuse_file_info* fi) {
+	(void)path; (void)size; (void)fi;
 	return -EROFS;
 }
 
@@ -78,7 +89,8 @@ int hello_open(const char* path, struct fuse_file_info* fi) {
 }
 
 int hello_read(const char* path, char* buf, size_t size, off_t offset,
-		     struct fuse_file_info*) {
+		     struct fuse_file_info* fi) {
+	(void)fi;
 	if (strcmp(path, hello_file_path) != 0) {
 		return -ENOENT;
 	}
@@ -93,13 +105,15 @@ int hello_read(const char* path, char* buf, size_t size, off_t offset,
 	return size;
 }
 
-int hello_write(const char *, const char *, size_t, off_t,
-		      struct fuse_file_info *) {
+int hello_write(const char* path, const char* buf, size_t size, off_t offset,
+		      struct fuse_file_info* fi) {
+	(void)path; (void)buf; (void)size; (void)offset; (void)fi;
 	return -EROFS;
 }
 
-int hello_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t,
-			struct fuse_file_info*, enum fuse_readdir_flags) {
+int hello_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t d_off,
+			struct fuse_file_info* fi, enum fuse_readdir_flags fl) {
+  (void)d_off; (void)fi; (void)fl;
 	if (strcmp(path, "/") != 0) {
 		return -ENOENT;
 	}
@@ -109,11 +123,13 @@ int hello_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t,
 	return 0;
 }
 
-void* hello_init(struct fuse_conn_info*, struct fuse_config*) {
+void* hello_init(struct fuse_conn_info* conn, struct fuse_config* cfg) {
+	(void)conn; (void)cfg;
 	return NULL;
 }
 
-int hello_create(const char*, mode_t, struct fuse_file_info*) {
+int hello_create(const char* path, mode_t mode, struct fuse_file_info* fi) {
+	(void)path; (void)mode; (void)fi;
 	return -EROFS;
 }
 

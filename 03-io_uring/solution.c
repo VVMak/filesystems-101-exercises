@@ -5,10 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define IO_BLOCK_SIZE 3 // 1 << 18; // 256 KB in bytes
+#define IO_BLOCK_SIZE (1 << 18) // 256 KB in bytes
 
 #define NUM_OF_READS 4
-#define QUEUE_SIZE 4096
+#define QUEUE_SIZE 8
 
 struct common_info {
 	int in;
@@ -66,10 +66,13 @@ struct io_data * wait_operation(struct common_info * info) {
 int handle_read(struct common_info * info, struct io_data * data) {
 	--info->reads;
 	if (data->res < 0) {
-		return data->res;
+		int res = data->res;
+		free(data);
+		return res;
 	}
 	if (data->res == 0) {
 		info->end = true;
+		free(data);
 		return 0;
 	}
 	send_write(info, data);
@@ -90,7 +93,6 @@ int copy(int in, int out)
 	(void) in;
 	(void) out;
 
-
 	struct common_info info;
 	memset(&info, 0, sizeof(info));
 	info.in = in;
@@ -101,14 +103,15 @@ int copy(int in, int out)
 	for (size_t i = 0; i < NUM_OF_READS; ++i) {
 		send_read(&info);
 	}
+	int res = 0;
 	while (info.reads > 0 || info.writes > 0) {
 		struct io_data * data = wait_operation(&info);
-		int res = (data->op == READ ? handle_read(&info, data) : handle_write(&info, data));
+		res = (data->op == READ ? handle_read(&info, data) : handle_write(&info, data));
 		if (res < 0) {
-			io_uring_queue_exit(&info.ring);
-			return res;
+			info.end = true;
 		}
 	}
+
 	io_uring_queue_exit(&info.ring);
-	return 0;
+	return res;
 }

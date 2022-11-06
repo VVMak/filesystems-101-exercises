@@ -76,6 +76,6 @@ int dump_dir(int img, int inode_nr)
 	return 0;
 }
 
-void report_file(int inode_nr, char type, const char *name) {
-	printf("Inode %d, type: %c, name: %s\n", inode_nr, type, name);
-}
+// void report_file(int inode_nr, char type, const char *name) {
+// 	printf("Inode %d, type: %c, name: %s\n", inode_nr, type, name);
+// }

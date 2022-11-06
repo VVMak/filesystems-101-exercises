@@ -63,6 +63,7 @@ int dump_dir(int img, int inode_nr)
 				break;
 			}
 			char file_type = (dir_entry->file_type == EXT2_FT_DIR ? 'd' : 'f');
+			dir_entry->name[dir_entry->name_len] = '\0';
 			report_file(dir_entry->inode, file_type, dir_entry->name);
 			dir_entry = (struct ext2_dir_entry_2*)((char*)dir_entry + dir_entry->rec_len);
 		}

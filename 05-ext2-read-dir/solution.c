@@ -60,6 +60,9 @@ int dump_dir(int img, int inode_nr)
 			if (pread(img, &dir_entry, size, offset) < 0) {
 				return -errno;
 			}
+			if (dir_entry.inode == 0) {
+				break;
+			}
 			memset(dir_entry.name, 0, EXT2_NAME_LEN);
 			if (pread(img, dir_entry.name, dir_entry.name_len, offset + size) < 0) {
 				return -errno;

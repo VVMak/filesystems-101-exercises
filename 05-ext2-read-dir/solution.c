@@ -69,7 +69,6 @@ int dump_dir(int img, int inode_nr)
 			}
 			char file_type = (dir_entry.file_type == EXT2_FT_DIR ? 'd' : 'f');
 			report_file(dir_entry.inode, file_type, dir_entry.name);
-			// printf("%d\n", dir_entry.rec_len);
 			remained_block_bytes -= dir_entry.rec_len;
 			offset += dir_entry.rec_len;
 		}

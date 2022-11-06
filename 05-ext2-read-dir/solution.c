@@ -69,6 +69,7 @@ int dump_dir(int img, int inode_nr)
 		remained_bytes -= block_size;
 	}
 	// indirect blocks
+	free(block);
 	return 0;
 }
 

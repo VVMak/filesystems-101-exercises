@@ -69,7 +69,7 @@ int dump_dir(int img, int inode_nr)
 			if (pread(img, dir_entry.name, dir_entry.name_len, offset + size) < 0) {
 				return -errno;
 			}
-			char file_type = (S_ISDIR(dir_entry.file_type) ? 'd' : 'f');
+			char file_type = (dir_entry.file_type == EXT2_FT_DIR ? 'd' : 'f');
 			report_file(dir_entry.inode, file_type, dir_entry.name);
 			remained_bytes -= dir_entry.rec_len;
 			offset += dir_entry.rec_len;

@@ -49,28 +49,22 @@ int dump_dir(int img, int inode_nr)
 		return -errno;
 	}
 
-	size_t block_size = EXT2_BLOCK_SIZE(&sb);
+	long block_size = EXT2_BLOCK_SIZE(&sb);
+	char* block = malloc(block_size);
 	int remained_bytes = inode.i_size;
 	for (size_t i = 0; i < EXT2_NDIR_BLOCKS && remained_bytes > 0; ++i) {
-		off_t offset = inode.i_block[i] * block_size;
-		int remained_block_bytes = block_size;
-		for (size_t file_num = 0; remained_block_bytes > 0; ++file_num) {
-			int size = offsetof(struct ext2_dir_entry_2, name);
-			struct ext2_dir_entry_2 dir_entry;
-			if (pread(img, &dir_entry, size, offset) < 0) {
-				return -errno;
-			}
-			if (dir_entry.inode == 0) {
+		if (pread(img, block, block_size, inode.i_block[i] * block_size) < 0) {
+			free(block);
+			return -errno;
+		}
+		struct ext2_dir_entry_2* dir_entry = (struct ext2_dir_entry_2*)block;
+		while ((char*)dir_entry - block < block_size) {
+			if (dir_entry->inode == 0) {
 				break;
 			}
-			memset(dir_entry.name, 0, EXT2_NAME_LEN);
-			if (pread(img, dir_entry.name, dir_entry.name_len, offset + size) < 0) {
-				return -errno;
-			}
-			char file_type = (dir_entry.file_type == EXT2_FT_DIR ? 'd' : 'f');
-			report_file(dir_entry.inode, file_type, dir_entry.name);
-			remained_block_bytes -= dir_entry.rec_len;
-			offset += dir_entry.rec_len;
+			char file_type = (dir_entry->file_type == EXT2_FT_DIR ? 'd' : 'f');
+			report_file(dir_entry->inode, file_type, dir_entry->name);
+			dir_entry = (struct ext2_dir_entry_2*)((char*)dir_entry + dir_entry->rec_len);
 		}
 		remained_bytes -= block_size;
 	}

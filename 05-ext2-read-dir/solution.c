@@ -26,6 +26,26 @@ int get_inode(struct ext2_inode* inode, int img, struct ext2_super_block* sb, st
 	return pread(img, inode, sizeof(struct ext2_inode), inode_offset);
 }
 
+int handle_dir_block(int img, size_t block_nr, long block_size) {
+	char* block = malloc(block_size);
+	if (pread(img, block, block_size, block_nr * block_size) < 0) {
+		free(block);
+		return -errno;
+	}
+	struct ext2_dir_entry_2* dir_entry = (struct ext2_dir_entry_2*)block;
+	while ((char*)dir_entry - block < block_size) {
+		if (dir_entry->inode == 0) {
+			break;
+		}
+		char file_type = (dir_entry->file_type == EXT2_FT_DIR ? 'd' : 'f');
+		dir_entry->name[dir_entry->name_len] = '\0';
+		report_file(dir_entry->inode, file_type, dir_entry->name);
+		dir_entry = (struct ext2_dir_entry_2*)((char*)dir_entry + dir_entry->rec_len);
+	}
+	free(block);
+	return 0;
+}
+
 int dump_dir(int img, int inode_nr)
 {
 	(void) img;
@@ -50,27 +70,61 @@ int dump_dir(int img, int inode_nr)
 	}
 
 	long block_size = EXT2_BLOCK_SIZE(&sb);
-	char* block = malloc(block_size);
 	int remained_bytes = inode.i_size;
 	for (size_t i = 0; i < EXT2_NDIR_BLOCKS && remained_bytes > 0; ++i) {
-		if (pread(img, block, block_size, inode.i_block[i] * block_size) < 0) {
-			free(block);
+		if (handle_dir_block(img, inode.i_block[i], block_size) < 0) {
 			return -errno;
-		}
-		struct ext2_dir_entry_2* dir_entry = (struct ext2_dir_entry_2*)block;
-		while ((char*)dir_entry - block < block_size) {
-			if (dir_entry->inode == 0) {
-				break;
-			}
-			char file_type = (dir_entry->file_type == EXT2_FT_DIR ? 'd' : 'f');
-			dir_entry->name[dir_entry->name_len] = '\0';
-			report_file(dir_entry->inode, file_type, dir_entry->name);
-			dir_entry = (struct ext2_dir_entry_2*)((char*)dir_entry + dir_entry->rec_len);
 		}
 		remained_bytes -= block_size;
 	}
-	// indirect blocks
-	free(block);
+	if (remained_bytes <= 0) {
+		return 0;
+	}
+	
+	// ------------------
+
+	uint32_t* redir_1 = malloc(block_size);
+	res = pread(img, redir_1, block_size, block_size * inode.i_block[EXT2_IND_BLOCK]);
+	if (res < 0) {
+		return -errno;
+	}
+	size_t MAX_REDIRECT_BLOCKS = block_size / sizeof(uint32_t);
+	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS && remained_bytes > 0; ++i) {
+		if (handle_dir_block(img, redir_1[i], block_size) < 0) {
+			free(redir_1);
+			return -errno;
+		}
+		remained_bytes -= block_size;
+	}
+	if (remained_bytes <= 0) {
+		free(redir_1);
+		return 0;
+	}
+
+
+	res = pread(img, redir_1, block_size, inode.i_block[EXT2_DIND_BLOCK] * block_size);
+	if (res < 0) {
+		return -errno;
+	}
+	uint32_t* redir_2 = malloc(block_size);
+	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS && remained_bytes > 0; ++i) {
+		res = pread(img, redir_2, block_size, redir_1[i] * block_size);
+		if (res < 0) {
+			free(redir_1);
+			free(redir_2);
+			return -errno;
+		}
+		for (size_t j = 0; j < MAX_REDIRECT_BLOCKS && remained_bytes > 0; ++j) {
+			if (handle_dir_block(img, redir_2[j], block_size) < 0) {
+				free(redir_1);
+				free(redir_2);
+				return -errno;
+			}
+			remained_bytes -= block_size;
+		}
+	}
+	free(redir_1);
+	free(redir_2);
 	return 0;
 }
 

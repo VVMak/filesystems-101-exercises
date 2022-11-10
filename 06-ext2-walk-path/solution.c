@@ -188,7 +188,7 @@ int copy_file(int img, struct ext2_super_block* sb, int inode_nr, int out) {
 	if (res < 0) {
 		return res;
 	}
-	size_t remained_bytes = inode.i_size - 1;
+	size_t remained_bytes = inode.i_size;
 	for (size_t i = 0; i < EXT2_NDIR_BLOCKS && remained_bytes > 0; ++i) {
 		if ((res = write_data_block(inode.i_block[i], block_size, img, out, remained_bytes)) < 0) {
 			return res;

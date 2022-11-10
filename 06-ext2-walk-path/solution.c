@@ -172,7 +172,7 @@ int write_data_block(uint32_t block_nr, uint32_t block_size, int img, int out, s
 	int size = min(file_size, block_size);
 	void* block = malloc(size);
 	int res = pread(img, block, size, block_nr * block_size);
-	for (int i = 0; i < size + 1; ++i) {
+	for (int i = 0; i < size; ++i) {
 		printf("%d\n", (int)((char*)block)[i]);
 	}
 	if (res < 0) {

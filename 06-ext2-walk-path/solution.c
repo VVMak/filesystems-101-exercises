@@ -75,8 +75,8 @@ int handle_dir_block(int img, size_t block_nr, long block_size, const char* file
 		}
 		dir_entry = (struct ext2_dir_entry_2*)((char*)dir_entry + dir_entry->rec_len);
 	}
+	*remained_bytes -= (char*)dir_entry - block;
 	free(block);
-	*remained_bytes -= block_size;
 	return -ENOENT;
 }
 
@@ -96,14 +96,13 @@ int handle_ind_block(int img, size_t block_nr, long block_size, const char* file
 			free(redir);
 			return res;
 		}
-		*remained_bytes -= block_size;
 	}
 	free(redir);
 	return -ENOENT;
 }
 
 int handle_d_ind_block(int img, size_t block_nr, long block_size, const char* file, int* remained_bytes) {
-		if (*remained_bytes <= 0) {
+	if (*remained_bytes <= 0) {
 		return -ENOENT;
 	}
 	uint32_t* redir = malloc(block_size);
@@ -118,7 +117,6 @@ int handle_d_ind_block(int img, size_t block_nr, long block_size, const char* fi
 			free(redir);
 			return res;
 		}
-		*remained_bytes -= block_size;
 	}
 	free(redir);
 	return -ENOENT;
@@ -256,7 +254,6 @@ int dump_file(int img, const char *path, int out)
 		return res;
 	}
 	if ((res = find_inode(img, &sb, 2, path)) < 0) {
-		assert(false);
 		return res;
 	}
 	if ((res = copy_file(img, &sb, res, out)) < 0) {

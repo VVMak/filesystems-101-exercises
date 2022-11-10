@@ -51,7 +51,7 @@ bool get_next_filename(const char* path, char* filename) {
 		return false;
 	}
 	path += 1;
-	memset(filename, 0, EXT2_NAME_LEN + 1);
+	memset(filename, '\0', EXT2_NAME_LEN + 1);
 	const char* pos = strchr(path, '/');
 	if (pos == NULL) {
 		pos = path + strlen(path);
@@ -61,6 +61,7 @@ bool get_next_filename(const char* path, char* filename) {
 }
 
 int handle_dir_block(int img, size_t block_nr, long block_size, const char* file, int* remained_bytes) {
+	assert(*remained_bytes > 0);
 	char* block = malloc(block_size);
 	if (pread(img, block, block_size, block_nr * block_size) < 0) {
 		free(block);
@@ -129,13 +130,10 @@ int find_inode(int img, struct ext2_super_block* sb, int inode_nr, const char* p
 	char filename[EXT2_NAME_LEN + 1];
 	while (get_next_filename(path, filename)) {
 		path += strlen(filename) + 1;
-		assert(*path == '\0' || *path == '/');
 		if ((res = get_inode(&inode, img, sb, inode_nr)) < 0) {
 			return res;
 		}
 		if (!S_ISDIR(inode.i_mode)) {
-			assert(inode_nr > 0);
-			assert(inode_nr != 2);
 			return -ENOTDIR;
 		}
 		int remained_bytes = inode.i_size;
@@ -143,7 +141,6 @@ int find_inode(int img, struct ext2_super_block* sb, int inode_nr, const char* p
 		for (size_t i = 0; i < EXT2_NDIR_BLOCKS && remained_bytes > 0; ++i) {
 			if ((res = handle_dir_block(img, inode.i_block[i], block_size, filename, &remained_bytes)) >= 0) {
 				inode_nr = res;
-				assert(inode_nr > 2);
 				found = true;
 				break;
 			} else if (res != -ENOENT) {

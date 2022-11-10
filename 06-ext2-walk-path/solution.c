@@ -134,6 +134,8 @@ int find_inode(int img, struct ext2_super_block* sb, int inode_nr, const char* p
 			return res;
 		}
 		if (!S_ISDIR(inode.i_mode)) {
+			assert(inode_nr > 0);
+			assert(inode_nr != 2);
 			return -ENOTDIR;
 		}
 		int remained_bytes = inode.i_size;
@@ -253,9 +255,7 @@ int dump_file(int img, const char *path, int out)
 		return res;
 	}
 	if ((res = find_inode(img, &sb, 2, path)) < 0) {
-		assert(res != 0);
-		assert(res > 0 || res == -ENOENT || res == -ENOTDIR);
-		assert(res > 0);
+		assert(res != -ENOTDIR);
 		return res;
 	}
 	if ((res = copy_file(img, &sb, res, out)) < 0) {

@@ -184,17 +184,15 @@ int find_inode(int img, int out, struct ext2_super_block* sb, int inode_nr, cons
 	const int block_size = EXT2_BLOCK_SIZE(sb);
 	int remained_bytes = inode.i_size;
 	for (size_t i = 0; i < EXT2_NDIR_BLOCKS && remained_bytes > 0; ++i) {
-		int res = handle_dir_block(img, out, inode.i_block[i], sb, path);
-    if (res != -ENOENT) {
-      return res;
+		int handle_res = handle_dir_block(img, out, inode.i_block[i], sb, path);
+    if (handle_res != -ENOENT) {
+      return handle_res;
     }
 		remained_bytes -= block_size;
 	}
 	if (remained_bytes <= 0) {
 		return -ENOENT;
 	}
-	
-	// ------------------
 
 	uint32_t* redir_1 = malloc(block_size);
 	res = pread(img, redir_1, block_size, block_size * inode.i_block[EXT2_IND_BLOCK]);
@@ -251,7 +249,7 @@ int dump_file(int img, const char *path, int out)
 		return res;
 	}
 	if ((res = find_inode(img, out, &sb, 2, path)) < 0) {
-		assert(res > 0);
+		assert(res != -ENOENT);
 		return res;
 	}
 	return 0;

@@ -253,11 +253,11 @@ int dump_file(int img, const char *path, int out)
 		return res;
 	}
 	if ((res = find_inode(img, &sb, 2, path)) < 0) {
+		assert(res != 0);
+		assert(res > 0 || res == -ENOENT);
+		assert(res > 0);
 		return res;
 	}
-	assert(res != 0);
-	assert(res > 0 || res == -ENOENT);
-	assert(res > 0);
 	if ((res = copy_file(img, &sb, res, out)) < 0) {
 	  return res;
 	}

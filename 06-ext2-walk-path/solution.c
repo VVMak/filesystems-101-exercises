@@ -251,6 +251,7 @@ int dump_file(int img, const char *path, int out)
 		return res;
 	}
 	if ((res = find_inode(img, out, &sb, 2, path)) < 0) {
+		assert(res != -ENOTDIR);
 		return res;
 	}
 	return 0;

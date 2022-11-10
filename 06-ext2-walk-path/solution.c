@@ -68,14 +68,14 @@ int handle_dir_block(int img, size_t block_nr, long block_size, const char* file
 	}
 	struct ext2_dir_entry_2* dir_entry = (struct ext2_dir_entry_2*)block;
 	while ((char*)dir_entry - block < block_size && dir_entry->inode > 0) {
-		int inode_nr = dir_entry->inode;
 		if (strlen(file) == dir_entry->name_len && !strncmp(file, dir_entry->name, dir_entry->name_len)) {
+			int inode_nr = dir_entry->inode;
 			free(block);
 			return inode_nr;
 		}
 		dir_entry = (struct ext2_dir_entry_2*)((char*)dir_entry + dir_entry->rec_len);
 	}
-	*remained_bytes -= (char*)dir_entry - block;
+	*remained_bytes -= block_size;
 	free(block);
 	return -ENOENT;
 }
@@ -129,16 +129,19 @@ int find_inode(int img, struct ext2_super_block* sb, int inode_nr, const char* p
 	char filename[EXT2_NAME_LEN + 1];
 	while (get_next_filename(path, filename)) {
 		path += strlen(filename) + 1;
+		assert(*path == '\0' || *path == '/');
 		if ((res = get_inode(&inode, img, sb, inode_nr)) < 0) {
 			return res;
 		}
 		if (!S_ISDIR(inode.i_mode)) {
 			return -ENOTDIR;
 		}
+		assert(S_ISREG(inode.i_mode));
 		int remained_bytes = inode.i_size;
 		bool found = false;
 		for (size_t i = 0; i < EXT2_NDIR_BLOCKS && remained_bytes > 0; ++i) {
 			if ((res = handle_dir_block(img, inode.i_block[i], block_size, filename, &remained_bytes)) >= 0) {
+				assert(inode_nr > 2);
 				inode_nr = res;
 				found = true;
 				break;
@@ -245,9 +248,6 @@ int copy_file(int img, struct ext2_super_block* sb, int inode_nr, int out) {
 
 int dump_file(int img, const char *path, int out)
 {
-	(void) out;
-
-	/* implement me */
 	int res;
 	struct ext2_super_block sb;
 	if ((res = read_sb(&sb, img)) < 0) {
@@ -256,6 +256,9 @@ int dump_file(int img, const char *path, int out)
 	if ((res = find_inode(img, &sb, 2, path)) < 0) {
 		return res;
 	}
+	assert(res != 0);
+	assert(res > 0 || res == -ENOENT);
+	assert(res > 0);
 	if ((res = copy_file(img, &sb, res, out)) < 0) {
 	  return res;
 	}

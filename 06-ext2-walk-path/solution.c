@@ -69,7 +69,7 @@ int handle_dir_block(int img, size_t block_nr, long block_size, const char* file
 	struct ext2_dir_entry_2* dir_entry = (struct ext2_dir_entry_2*)block;
 	while ((char*)dir_entry - block < block_size && dir_entry->inode > 0) {
 		int inode_nr = dir_entry->inode;
-		if (!strncmp(file, dir_entry->name, dir_entry->name_len)) {
+		if (strlen(file) == dir_entry->name_len && !strncmp(file, dir_entry->name, dir_entry->name_len)) {
 			free(block);
 			return inode_nr;
 		}

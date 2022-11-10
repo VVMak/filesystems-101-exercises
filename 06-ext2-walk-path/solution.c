@@ -68,9 +68,8 @@ int handle_dir_block(int img, size_t block_nr, long block_size, const char* file
 	}
 	struct ext2_dir_entry_2* dir_entry = (struct ext2_dir_entry_2*)block;
 	while ((char*)dir_entry - block < block_size && dir_entry->inode > 0) {
-		dir_entry->name[dir_entry->name_len] = '\0';
-		if (!strcmp(file, dir_entry->name)) {
-			int inode_nr = dir_entry->inode;
+		int inode_nr = dir_entry->inode;
+		if (!strncmp(file, dir_entry->name, dir_entry->name_len)) {
 			free(block);
 			return inode_nr;
 		}
@@ -92,7 +91,7 @@ int handle_ind_block(int img, size_t block_nr, long block_size, const char* file
 		return -errno;
 	}
 	size_t MAX_REDIRECT_BLOCKS = block_size / sizeof(uint32_t);
-	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS && remained_bytes; ++i) {
+	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS && *remained_bytes > 0; ++i) {
 		if ((res = handle_dir_block(img, redir[i], block_size, file, remained_bytes)) != -ENOENT) {
 			free(redir);
 			return res;
@@ -114,7 +113,7 @@ int handle_d_ind_block(int img, size_t block_nr, long block_size, const char* fi
 		return -errno;
 	}
 	size_t MAX_REDIRECT_BLOCKS = block_size / sizeof(uint32_t);
-	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS && remained_bytes; ++i) {
+	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS && *remained_bytes > 0; ++i) {
 		if ((res = handle_ind_block(img, redir[i], block_size, file, remained_bytes)) != -ENOENT) {
 			free(redir);
 			return res;

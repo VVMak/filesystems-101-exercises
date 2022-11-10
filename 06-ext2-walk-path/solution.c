@@ -256,6 +256,7 @@ int dump_file(int img, const char *path, int out)
 		return res;
 	}
 	if ((res = find_inode(img, &sb, 2, path)) < 0) {
+		assert(false);
 		return res;
 	}
 	if ((res = copy_file(img, &sb, res, out)) < 0) {

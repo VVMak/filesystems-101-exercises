@@ -172,16 +172,13 @@ int write_data_block(uint32_t block_nr, uint32_t block_size, int img, int out, s
 	int size = min(file_size, block_size);
 	void* block = malloc(size);
 	int res = pread(img, block, size, block_nr * block_size);
-	for (int i = 0; i < size; ++i) {
-		printf("%d\n", (int)((char*)block)[i]);
-	}
 	if (res < 0) {
 		free(block);
-		return -1;
+		return -errno;
 	}
 	res = write(out, block, size);
 	free(block);
-	return (res < 0 ? res : size);
+	return (res < 0 ? -errno : size);
 }
 
 int copy_file(int img, struct ext2_super_block* sb, int inode_nr, int out) {
@@ -191,12 +188,10 @@ int copy_file(int img, struct ext2_super_block* sb, int inode_nr, int out) {
 	if (res < 0) {
 		return res;
 	}
-	size_t remained_bytes = inode.i_size;
-	printf("%d\n", inode.i_size);
+	size_t remained_bytes = inode.i_size - 1;
 	for (size_t i = 0; i < EXT2_NDIR_BLOCKS && remained_bytes > 0; ++i) {
-		res = write_data_block(inode.i_block[i], block_size, img, out, remained_bytes);
-		if (res < 0) {
-			return -errno;
+		if ((res = write_data_block(inode.i_block[i], block_size, img, out, remained_bytes)) < 0) {
+			return res;
 		}
 		remained_bytes -= res;
 	}
@@ -262,12 +257,10 @@ int dump_file(int img, const char *path, int out)
 		return res;
 	}
 	if ((res = find_inode(img, &sb, 2, path)) < 0) {
-		printf("r%d\n", res);
 		return res;
 	}
 	if ((res = copy_file(img, &sb, res, out)) < 0) {
 	  return res;
 	}
-	printf("+\n");
 	return 0;
 }

@@ -136,7 +136,6 @@ int find_inode(int img, struct ext2_super_block* sb, int inode_nr, const char* p
 		if (!S_ISDIR(inode.i_mode)) {
 			return -ENOTDIR;
 		}
-		assert(S_ISREG(inode.i_mode));
 		int remained_bytes = inode.i_size;
 		bool found = false;
 		for (size_t i = 0; i < EXT2_NDIR_BLOCKS && remained_bytes > 0; ++i) {

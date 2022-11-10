@@ -140,8 +140,8 @@ int find_inode(int img, struct ext2_super_block* sb, int inode_nr, const char* p
 		bool found = false;
 		for (size_t i = 0; i < EXT2_NDIR_BLOCKS && remained_bytes > 0; ++i) {
 			if ((res = handle_dir_block(img, inode.i_block[i], block_size, filename, &remained_bytes)) >= 0) {
-				assert(inode_nr > 2);
 				inode_nr = res;
+				assert(inode_nr > 2);
 				found = true;
 				break;
 			} else if (res != -ENOENT) {

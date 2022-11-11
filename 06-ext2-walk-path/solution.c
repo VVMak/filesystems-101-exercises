@@ -136,7 +136,7 @@ int copy_file(int img, struct ext2_super_block* sb, int inode_nr, int out) {
 }
 
 
-int handle_dir_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* filename) {
+int handle_dir_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* filename, bool is_dir) {
   const int block_size = EXT2_BLOCK_SIZE(sb);
 	char* block = malloc(block_size);
 	if (pread(img, block, block_size, block_nr * block_size) < 0) {
@@ -148,8 +148,12 @@ int handle_dir_block(int img, uint32_t block_nr, struct ext2_super_block* sb, co
 		assert (dir_entry->inode != 0);
     if (dir_entry->name_len == strlen(filename) && !strncmp(filename, dir_entry->name, dir_entry->name_len)) {
       int inode_nr = dir_entry->inode;
-      free(block);
-      return inode_nr;
+			if (!is_dir || dir_entry->file_type == EXT2_FT_DIR) {
+				free(block);
+				return inode_nr;
+			}
+			free(block);
+			return -ENOTDIR;
     }
 		dir_entry = (struct ext2_dir_entry_2*)((char*)dir_entry + dir_entry->rec_len);
 	}
@@ -157,7 +161,7 @@ int handle_dir_block(int img, uint32_t block_nr, struct ext2_super_block* sb, co
 	return -ENOENT;
 }
 
-int handle_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* filename) {
+int handle_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* filename, bool is_dir) {
 	if (block_nr == 0) {
 		return -ENOENT;
 	}
@@ -170,7 +174,7 @@ int handle_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, co
 	}
 	size_t MAX_REDIRECT_BLOCKS = block_size / sizeof(uint32_t);
 	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS && redir[i] != 0; ++i) {
-		if ((res = handle_dir_block(img, redir[i], sb, filename)) != -ENOENT) {
+		if ((res = handle_dir_block(img, redir[i], sb, filename, is_dir)) != -ENOENT) {
 			free(redir);
 			return res;
 		}
@@ -179,7 +183,7 @@ int handle_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, co
 	return -ENOENT;
 }
 
-int handle_d_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* filename) {
+int handle_d_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* filename, bool is_dir) {
 	if (block_nr == 0) {
 		return -ENOENT;
 	}
@@ -192,7 +196,7 @@ int handle_d_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, 
 	}
 	size_t MAX_REDIRECT_BLOCKS = block_size / sizeof(uint32_t);
 	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS && redir[i] != 0; ++i) {
-		if ((res = handle_ind_block(img, redir[i], sb, filename)) != -ENOENT) {
+		if ((res = handle_ind_block(img, redir[i], sb, filename, is_dir)) != -ENOENT) {
 			free(redir);
 			return res;
 		}
@@ -208,16 +212,15 @@ int find_inode(int img, struct ext2_super_block* sb, int inode_nr, const char* p
 	char filename[EXT2_NAME_LEN + 1];
 	while (path[0] == '/') {
 		path = get_next_filename(path, filename);
+		bool is_dir = (path[0] == '/');
 		assert(inode_nr > 0);
 		if ((res = get_inode(&inode, img, sb, inode_nr)) < 0) {
 			return res;
 		}
-		if (!S_ISDIR(inode.i_mode)) {
-			return -ENOTDIR;
-		}
+		assert(!S_ISDIR(inode.i_mode));
 		bool found = false;
 		for (size_t i = 0; i < EXT2_NDIR_BLOCKS && inode.i_block[i] != 0; ++i) {
-			if ((res = handle_dir_block(img, inode.i_block[i], sb, filename)) >= 0) {
+			if ((res = handle_dir_block(img, inode.i_block[i], sb, filename, is_dir)) >= 0) {
 				inode_nr = res;
 				found = true;
 				break;
@@ -226,13 +229,13 @@ int find_inode(int img, struct ext2_super_block* sb, int inode_nr, const char* p
 			}
 		}
 		if (found) { continue; }
-		if ((res = handle_ind_block(img, inode.i_block[EXT2_IND_BLOCK], sb, filename)) >= 0) {
+		if ((res = handle_ind_block(img, inode.i_block[EXT2_IND_BLOCK], sb, filename, is_dir)) >= 0) {
 			inode_nr = res;
 			continue;
 		} else if (res != -ENOENT) {
 			return res;
 		}
-		if ((res = handle_d_ind_block(img, inode.i_block[EXT2_DIND_BLOCK], sb, filename)) >= 0) {
+		if ((res = handle_d_ind_block(img, inode.i_block[EXT2_DIND_BLOCK], sb, filename, is_dir)) >= 0) {
 			return res;
 		}
 		inode_nr = res;

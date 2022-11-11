@@ -217,7 +217,7 @@ int find_inode(int img, struct ext2_super_block* sb, int inode_nr, const char* p
 		if ((res = get_inode(&inode, img, sb, inode_nr)) < 0) {
 			return res;
 		}
-		assert(S_ISDIR(inode.i_mode));
+		// assert(S_ISDIR(inode.i_mode));
 		bool found = false;
 		for (size_t i = 0; i < EXT2_NDIR_BLOCKS && inode.i_block[i] != 0; ++i) {
 			if ((res = handle_dir_block(img, inode.i_block[i], sb, filename, is_dir)) >= 0) {

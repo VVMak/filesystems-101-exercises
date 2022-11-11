@@ -35,7 +35,8 @@ int read_bg_header(struct ext2_group_desc* bg, int img, struct ext2_super_block*
 	return (res < 0 ? -errno : res);
 }
 
-int get_inode(struct ext2_inode* inode, int img, struct ext2_super_block* sb, size_t inode_nr) {
+int get_inode(struct ext2_inode* inode, int img, struct ext2_super_block* sb, long inode_nr) {
+	assert(inode_nr > 0);
 	struct ext2_group_desc bg;
 	int res = read_bg_header(&bg, img, sb, inode_nr);
 	if (res < 0) {
@@ -147,7 +148,7 @@ int handle_dir_block(int img, uint32_t block_nr, struct ext2_super_block* sb, co
 	while ((char*)dir_entry - block < block_size) {
 		assert (dir_entry->inode != 0);
     if (dir_entry->name_len == strlen(filename) && !strncmp(filename, dir_entry->name, dir_entry->name_len)) {
-      int inode_nr = dir_entry->inode;
+      long inode_nr = dir_entry->inode;
 			if (!is_dir || dir_entry->file_type == EXT2_FT_DIR) {
 				free(block);
 				return inode_nr;
@@ -206,7 +207,7 @@ int handle_d_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, 
 }
 
 
-int find_inode(int img, struct ext2_super_block* sb, int inode_nr, const char* path) {
+int find_inode(int img, struct ext2_super_block* sb, long inode_nr, const char* path) {
 	int res;
 	struct ext2_inode inode;
 	char filename[EXT2_NAME_LEN + 1];

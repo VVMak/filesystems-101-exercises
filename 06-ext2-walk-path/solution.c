@@ -28,10 +28,9 @@ int read_sb(struct ext2_super_block* sb, int img) {
 int read_bg_header(struct ext2_group_desc* bg, int img, struct ext2_super_block* sb, size_t inode_nr) {
 	--inode_nr;
 	size_t bg_number = inode_nr / sb->s_inodes_per_group;
-	inode_nr %= sb->s_inodes_per_group;
 	size_t block_size = EXT2_BLOCK_SIZE(sb);
 
-	int res = pread(img, bg, sizeof(struct ext2_group_desc), (1024 / block_size + 1) * block_size + sizeof(struct ext2_group_desc) * bg_number);
+	int res = pread(img, bg, sizeof(struct ext2_group_desc), (sb->s_first_data_block + 1) * block_size + sizeof(struct ext2_group_desc) * bg_number);
 	return (res < 0 ? -errno : res);
 }
 
@@ -39,10 +38,12 @@ int get_inode(struct ext2_inode* inode, int img, struct ext2_super_block* sb, lo
 	assert(inode_nr > 0);
 	struct ext2_group_desc bg;
 	int res = read_bg_header(&bg, img, sb, inode_nr);
+	--inode_nr;
 	if (res < 0) {
 		return res;
 	}
-	off_t inode_offset = bg.bg_inode_table * EXT2_BLOCK_SIZE(sb) + (inode_nr - 1) * sb->s_inode_size;
+	inode_nr %= sb->s_inodes_per_group;
+	off_t inode_offset = bg.bg_inode_table * EXT2_BLOCK_SIZE(sb) + inode_nr * sb->s_inode_size;
 	res = pread(img, inode, sizeof(struct ext2_inode), inode_offset);
 	return (res < 0 ? -errno : res);
 }
@@ -187,9 +188,6 @@ int handle_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, co
 	}
 	size_t MAX_REDIRECT_BLOCKS = block_size / sizeof(uint32_t);
 	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS; ++i) {
-		if (redir[i] == 0) {
-			return -ENOENT;
-		}
 		if ((res = handle_dir_block(img, redir[i], sb, path)) != 0) {
 			free(redir);
 			return res;
@@ -212,9 +210,6 @@ int handle_d_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, 
 	}
 	size_t MAX_REDIRECT_BLOCKS = block_size / sizeof(uint32_t);
 	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS; ++i) {
-		if (redir[i] == 0) {
-			return -ENOENT;
-		}
 		if ((res = handle_ind_block(img, redir[i], sb, path)) != 0) {
 			free(redir);
 			return res;
@@ -229,12 +224,15 @@ int find_inode(int img, struct ext2_super_block* sb, long inode_nr, const char* 
 	if (inode_nr == 0) {
 		return -ENOENT;
 	}
+	if (path[0] != '/') {
+		return inode_nr;
+	}
+	path += 1;
 	long res;
 	struct ext2_inode inode;
 	if ((res = get_inode(&inode, img, sb, inode_nr)) < 0) {
 		return res;
 	}
-	path += 1;
 	for (size_t i = 0; i < EXT2_NDIR_BLOCKS; ++i) {
 		if ((res = handle_dir_block(img, inode.i_block[i], sb, path)) != 0) {
 			return res;

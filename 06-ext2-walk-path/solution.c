@@ -155,7 +155,6 @@ int handle_dir_block(int img, uint32_t block_nr, struct ext2_super_block* sb, co
 			return -ENOENT;
 		}
 		const char* pos = get_next_filename(path);
-		// printf("%s - %s - %s\n", path, pos, dir_entry->name); fflush(stdout);
     if (pos - path == dir_entry->name_len && !strncmp(path, dir_entry->name, dir_entry->name_len)) {
       long inode_nr = dir_entry->inode;
 			if (pos[0] != '/') {
@@ -255,7 +254,6 @@ int dump_file(int img, const char *path, int out)
 		return res;
 	}
 	if ((res = find_inode(img, &sb, 2, path)) < 0) {
-		assert(res != -ENOENT);
 		return res;
 	}
 	if ((res = copy_file(img, &sb, res, out)) < 0) {

@@ -138,6 +138,9 @@ int copy_file(int img, struct ext2_super_block* sb, int inode_nr, int out) {
 
 
 int handle_dir_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* filename, bool is_dir) {
+	if (block_nr == 0) {
+		return -ENOENT;
+	}
   const int block_size = EXT2_BLOCK_SIZE(sb);
 	char* block = malloc(block_size);
 	if (pread(img, block, block_size, block_nr * block_size) < 0) {
@@ -146,7 +149,9 @@ int handle_dir_block(int img, uint32_t block_nr, struct ext2_super_block* sb, co
 	}
 	struct ext2_dir_entry_2* dir_entry = (struct ext2_dir_entry_2*)block;
 	while ((char*)dir_entry - block < block_size) {
-		assert (dir_entry->inode != 0);
+		if (dir_entry->inode == 0) {
+			return -ENOENT;
+		}
     if (dir_entry->name_len == strlen(filename) && !strncmp(filename, dir_entry->name, dir_entry->name_len)) {
       long inode_nr = dir_entry->inode;
 			if (!is_dir || dir_entry->file_type == EXT2_FT_DIR) {
@@ -159,7 +164,7 @@ int handle_dir_block(int img, uint32_t block_nr, struct ext2_super_block* sb, co
 		dir_entry = (struct ext2_dir_entry_2*)((char*)dir_entry + dir_entry->rec_len);
 	}
 	free(block);
-	return -ENOENT;
+	return 0;
 }
 
 int handle_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* filename, bool is_dir) {
@@ -174,14 +179,17 @@ int handle_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, co
 		return -errno;
 	}
 	size_t MAX_REDIRECT_BLOCKS = block_size / sizeof(uint32_t);
-	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS && redir[i] != 0; ++i) {
-		if ((res = handle_dir_block(img, redir[i], sb, filename, is_dir)) != -ENOENT) {
+	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS; ++i) {
+		if (redir[i] == 0) {
+			return -ENOENT;
+		}
+		if ((res = handle_dir_block(img, redir[i], sb, filename, is_dir)) != 0) {
 			free(redir);
 			return res;
 		}
 	}
 	free(redir);
-	return -ENOENT;
+	return 0;
 }
 
 int handle_d_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* filename, bool is_dir) {
@@ -196,57 +204,55 @@ int handle_d_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, 
 		return -errno;
 	}
 	size_t MAX_REDIRECT_BLOCKS = block_size / sizeof(uint32_t);
-	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS && redir[i] != 0; ++i) {
-		if ((res = handle_ind_block(img, redir[i], sb, filename, is_dir)) != -ENOENT) {
+	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS; ++i) {
+		if (redir[i] == 0) {
+			return -ENOENT;
+		}
+		if ((res = handle_ind_block(img, redir[i], sb, filename, is_dir)) != 0) {
 			free(redir);
 			return res;
 		}
 	}
 	free(redir);
-	return -ENOENT;
+	return 0;
 }
 
 
 int find_inode(int img, struct ext2_super_block* sb, long inode_nr, const char* path) {
-	int res;
-	struct ext2_inode inode;
-	char filename[EXT2_NAME_LEN + 1];
-	while (path[0] == '/') {
-		path = get_next_filename(path, filename);
-		bool is_dir = (path[0] == '/');
-		assert(inode_nr > 0);
-		if ((res = get_inode(&inode, img, sb, inode_nr)) < 0) {
-			return res;
-		}
-		// assert(S_ISDIR(inode.i_mode));
-		bool found = false;
-		for (size_t i = 0; i < EXT2_NDIR_BLOCKS && inode.i_block[i] != 0; ++i) {
-			if ((res = handle_dir_block(img, inode.i_block[i], sb, filename, is_dir)) >= 0) {
-				inode_nr = res;
-				found = true;
-				break;
-			} else if (res != -ENOENT) {
-				return res;
-			}
-		}
-		if (found) { continue; }
-		if ((res = handle_ind_block(img, inode.i_block[EXT2_IND_BLOCK], sb, filename, is_dir)) >= 0) {
-			inode_nr = res;
-			continue;
-		} else if (res != -ENOENT) {
-			return res;
-		}
-		if ((res = handle_d_ind_block(img, inode.i_block[EXT2_DIND_BLOCK], sb, filename, is_dir)) < 0) {
-			return res;
-		}
-		inode_nr = res;
+	if (inode_nr == 0) {
+		return -ENOENT;
 	}
-	return inode_nr;
+	long res;
+	char filename[EXT2_NAME_LEN + 1];
+	struct ext2_inode inode;
+	path = get_next_filename(path, filename);
+	bool is_dir = (path[0] == '/');
+	if ((res = get_inode(&inode, img, sb, inode_nr)) < 0) {
+		return res;
+	}
+	for (size_t i = 0; i < EXT2_NDIR_BLOCKS && inode.i_block[i] != 0; ++i) {
+		if ((res = handle_dir_block(img, inode.i_block[i], sb, filename, is_dir)) < 0) {
+			return res;
+		} else if (res > 0) {
+			return (is_dir ? find_inode(img, sb, res, path) : res);
+		}
+	}
+	if ((res = handle_ind_block(img, inode.i_block[EXT2_IND_BLOCK], sb, filename, is_dir)) < 0) {
+		return res;
+	} else if (res > 0) {
+		return (is_dir ? find_inode(img, sb, res, path) : res);
+	}
+	if ((res = handle_d_ind_block(img, inode.i_block[EXT2_DIND_BLOCK], sb, filename, is_dir)) < 0) {
+		return res;
+	} else if (res > 0) {
+		return (is_dir ? find_inode(img, sb, res, path) : res);
+	}
+	return -ENOENT;
 }
 
 int dump_file(int img, const char *path, int out)
 {
-	int res;
+	long res;
 	struct ext2_super_block sb;
 	if ((res = read_sb(&sb, img)) < 0) {
 		return res;

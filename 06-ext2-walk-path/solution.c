@@ -47,14 +47,14 @@ int get_inode(struct ext2_inode* inode, int img, struct ext2_super_block* sb, lo
 	return (res < 0 ? -errno : res);
 }
 
-const char* get_next_filename(const char* path, char* filename) {
+const char* get_next_filename(const char* path/* , char* filename */) {
 	path += 1;
-	memset(filename, '\0', EXT2_NAME_LEN + 1);
+	// memset(filename, '\0', EXT2_NAME_LEN + 1);
 	const char* pos = strchr(path, '/');
 	if (pos == NULL) {
 		pos = path + strlen(path);
 	}
-	strncpy(filename, path, pos - path);
+	// strncpy(filename, path, pos - path);
 	return pos;
 }
 
@@ -136,8 +136,9 @@ int copy_file(int img, struct ext2_super_block* sb, int inode_nr, int out) {
 	return 0;
 }
 
+int find_inode(int img, struct ext2_super_block* sb, long inode_nr, const char* path);
 
-int handle_dir_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* filename, bool is_dir) {
+int handle_dir_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* path) {
 	if (block_nr == 0) {
 		return -ENOENT;
 	}
@@ -152,11 +153,17 @@ int handle_dir_block(int img, uint32_t block_nr, struct ext2_super_block* sb, co
 		if (dir_entry->inode == 0) {
 			return -ENOENT;
 		}
-    if (dir_entry->name_len == strlen(filename) && !strncmp(filename, dir_entry->name, dir_entry->name_len)) {
+		const char* pos = get_next_filename(path);
+		// printf("%s - %s - %s\n", path, pos, dir_entry->name); fflush(stdout);
+    if (pos - path == dir_entry->name_len && !strncmp(path, dir_entry->name, dir_entry->name_len)) {
       long inode_nr = dir_entry->inode;
-			if (!is_dir || dir_entry->file_type == EXT2_FT_DIR) {
+			if (pos[0] != '/') {
 				free(block);
 				return inode_nr;
+			}
+			if (dir_entry->file_type == EXT2_FT_DIR) {
+				free(block);
+				return find_inode(img, sb, inode_nr, pos);
 			}
 			free(block);
 			return -ENOTDIR;
@@ -167,7 +174,7 @@ int handle_dir_block(int img, uint32_t block_nr, struct ext2_super_block* sb, co
 	return 0;
 }
 
-int handle_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* filename, bool is_dir) {
+int handle_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* path) {
 	if (block_nr == 0) {
 		return -ENOENT;
 	}
@@ -183,7 +190,7 @@ int handle_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, co
 		if (redir[i] == 0) {
 			return -ENOENT;
 		}
-		if ((res = handle_dir_block(img, redir[i], sb, filename, is_dir)) != 0) {
+		if ((res = handle_dir_block(img, redir[i], sb, path)) != 0) {
 			free(redir);
 			return res;
 		}
@@ -192,7 +199,7 @@ int handle_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, co
 	return 0;
 }
 
-int handle_d_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* filename, bool is_dir) {
+int handle_d_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* path) {
 	if (block_nr == 0) {
 		return -ENOENT;
 	}
@@ -208,7 +215,7 @@ int handle_d_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, 
 		if (redir[i] == 0) {
 			return -ENOENT;
 		}
-		if ((res = handle_ind_block(img, redir[i], sb, filename, is_dir)) != 0) {
+		if ((res = handle_ind_block(img, redir[i], sb, path)) != 0) {
 			free(redir);
 			return res;
 		}
@@ -223,29 +230,21 @@ int find_inode(int img, struct ext2_super_block* sb, long inode_nr, const char* 
 		return -ENOENT;
 	}
 	long res;
-	char filename[EXT2_NAME_LEN + 1];
 	struct ext2_inode inode;
-	path = get_next_filename(path, filename);
-	bool is_dir = (path[0] == '/');
 	if ((res = get_inode(&inode, img, sb, inode_nr)) < 0) {
 		return res;
 	}
-	for (size_t i = 0; i < EXT2_NDIR_BLOCKS && inode.i_block[i] != 0; ++i) {
-		if ((res = handle_dir_block(img, inode.i_block[i], sb, filename, is_dir)) < 0) {
+	path += 1;
+	for (size_t i = 0; i < EXT2_NDIR_BLOCKS; ++i) {
+		if ((res = handle_dir_block(img, inode.i_block[i], sb, path)) != 0) {
 			return res;
-		} else if (res > 0) {
-			return (is_dir ? find_inode(img, sb, res, path) : res);
 		}
 	}
-	if ((res = handle_ind_block(img, inode.i_block[EXT2_IND_BLOCK], sb, filename, is_dir)) < 0) {
+	if ((res = handle_ind_block(img, inode.i_block[EXT2_IND_BLOCK], sb, path)) != 0) {
 		return res;
-	} else if (res > 0) {
-		return (is_dir ? find_inode(img, sb, res, path) : res);
 	}
-	if ((res = handle_d_ind_block(img, inode.i_block[EXT2_DIND_BLOCK], sb, filename, is_dir)) < 0) {
+	if ((res = handle_d_ind_block(img, inode.i_block[EXT2_DIND_BLOCK], sb, path)) != 0) {
 		return res;
-	} else if (res > 0) {
-		return (is_dir ? find_inode(img, sb, res, path) : res);
 	}
 	return -ENOENT;
 }

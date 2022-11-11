@@ -46,10 +46,7 @@ int get_inode(struct ext2_inode* inode, int img, struct ext2_super_block* sb, si
 	return (res < 0 ? -errno : res);
 }
 
-bool get_next_filename(const char* path, char* filename) {
-	if (path[0] != '/') {
-		return false;
-	}
+const char* get_next_filename(const char* path, char* filename) {
 	path += 1;
 	memset(filename, '\0', EXT2_NAME_LEN + 1);
 	const char* pos = strchr(path, '/');
@@ -57,120 +54,7 @@ bool get_next_filename(const char* path, char* filename) {
 		pos = path + strlen(path);
 	}
 	strncpy(filename, path, pos - path);
-	return true;
-}
-
-int handle_dir_block(int img, size_t block_nr, const int block_size, const char* file, int* remained_bytes) {
-	assert(*remained_bytes > 0);
-	assert(block_nr != 0);
-	char* block = malloc(block_size);
-	if (pread(img, block, block_size, block_nr * block_size) < 0) {
-		free(block);
-		return -errno;
-	}
-	struct ext2_dir_entry_2* dir_entry = (struct ext2_dir_entry_2*)block;
-	while ((char*)dir_entry - block < block_size && dir_entry->inode > 0) {
-		if (strlen(file) == dir_entry->name_len && !strncmp(file, dir_entry->name, dir_entry->name_len)) {
-			int inode_nr = dir_entry->inode;
-			free(block);
-			return inode_nr;
-		}
-		dir_entry = (struct ext2_dir_entry_2*)((char*)dir_entry + dir_entry->rec_len);
-	}
-	*remained_bytes -= block_size;
-	free(block);
-	return -ENOENT;
-}
-
-int handle_ind_block(int img, size_t block_nr, const int block_size, const char* file, int* remained_bytes) {
-	if (*remained_bytes <= 0) {
-		return -ENOENT;
-	}
-	uint32_t* redir = malloc(block_size);
-	int res = pread(img, redir, block_size, block_size * block_nr);
-	if (res < 0) {
-		free(redir);
-		return -errno;
-	}
-	size_t MAX_REDIRECT_BLOCKS = block_size / sizeof(uint32_t);
-	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS && *remained_bytes > 0; ++i) {
-		if (redir[i] == 0) {
-			break;
-		}
-		if ((res = handle_dir_block(img, redir[i], block_size, file, remained_bytes)) != -ENOENT) {
-			free(redir);
-			return res;
-		}
-	}
-	free(redir);
-	return -ENOENT;
-}
-
-int handle_d_ind_block(int img, size_t block_nr, const int block_size, const char* file, int* remained_bytes) {
-	if (*remained_bytes <= 0) {
-		return -ENOENT;
-	}
-	uint32_t* redir = malloc(block_size);
-	int res = pread(img, redir, block_size, block_size * block_nr);
-	if (res < 0) {
-		free(redir);
-		return -errno;
-	}
-	size_t MAX_REDIRECT_BLOCKS = block_size / sizeof(uint32_t);
-	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS && *remained_bytes > 0; ++i) {
-		if (redir[i] == 0) {
-			break;
-		}
-		if ((res = handle_ind_block(img, redir[i], block_size, file, remained_bytes)) != -ENOENT) {
-			free(redir);
-			return res;
-		}
-	}
-	free(redir);
-	return -ENOENT;
-}
-
-int find_inode(int img, struct ext2_super_block* sb, int inode_nr, const char* path) {
-	int res;
-	struct ext2_inode inode;
-	const int block_size = EXT2_BLOCK_SIZE(sb);
-	char filename[EXT2_NAME_LEN + 1];
-	while (get_next_filename(path, filename)) {
-		path += strlen(filename) + 1;
-		if ((res = get_inode(&inode, img, sb, inode_nr)) < 0) {
-			return res;
-		}
-		if (!S_ISDIR(inode.i_mode)) {
-			return -ENOTDIR;
-		}
-		int remained_bytes = inode.i_size;
-		bool found = false;
-		for (size_t i = 0; i < EXT2_NDIR_BLOCKS && remained_bytes > 0; ++i) {
-			if ((res = handle_dir_block(img, inode.i_block[i], block_size, filename, &remained_bytes)) >= 0) {
-				inode_nr = res;
-				found = true;
-				break;
-			} else if (res != -ENOENT) {
-				return res;
-			}
-		}
-		if (found) { continue; }
-		if ((res = handle_ind_block(img, inode.i_block[EXT2_IND_BLOCK], block_size, filename, &remained_bytes)) >= 0) {
-			inode_nr = res;
-			continue;
-		} else if (res != -ENOENT) {
-			return res;
-		}
-		if ((res = handle_d_ind_block(img, inode.i_block[EXT2_DIND_BLOCK], block_size, filename, &remained_bytes)) >= 0) {
-			inode_nr = res;
-			continue;
-		} else if (res != -ENOENT) {
-			return res;
-		}
-		
-		return -ENOENT;
-	}
-	return inode_nr;
+	return pos;
 }
 
 int write_data_block(uint32_t block_nr, uint32_t block_size, int img, int out, size_t file_size) {
@@ -249,6 +133,111 @@ int copy_file(int img, struct ext2_super_block* sb, int inode_nr, int out) {
 	free(redir_1);
 	free(redir_2);
 	return 0;
+}
+
+
+int handle_dir_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* filename) {
+  const int block_size = EXT2_BLOCK_SIZE(sb);
+	char* block = malloc(block_size);
+	if (pread(img, block, block_size, block_nr * block_size) < 0) {
+		free(block);
+		return -errno;
+	}
+	struct ext2_dir_entry_2* dir_entry = (struct ext2_dir_entry_2*)block;
+	while ((char*)dir_entry - block < block_size) {
+		assert (dir_entry->inode != 0);
+    if (dir_entry->name_len == strlen(filename) && !strncmp(filename, dir_entry->name, dir_entry->name_len)) {
+      int inode_nr = dir_entry->inode;
+      free(block);
+      return inode_nr;
+    }
+		dir_entry = (struct ext2_dir_entry_2*)((char*)dir_entry + dir_entry->rec_len);
+	}
+	free(block);
+	return -ENOENT;
+}
+
+int handle_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* filename) {
+	if (block_nr == 0) {
+		return -ENOENT;
+	}
+	const int block_size = EXT2_BLOCK_SIZE(sb);
+	uint32_t* redir = malloc(block_size);
+	int res = pread(img, redir, block_size, block_size * block_nr);
+	if (res < 0) {
+		free(redir);
+		return -errno;
+	}
+	size_t MAX_REDIRECT_BLOCKS = block_size / sizeof(uint32_t);
+	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS && redir[i] != 0; ++i) {
+		if ((res = handle_dir_block(img, redir[i], sb, filename)) != -ENOENT) {
+			free(redir);
+			return res;
+		}
+	}
+	free(redir);
+	return -ENOENT;
+}
+
+int handle_d_ind_block(int img, uint32_t block_nr, struct ext2_super_block* sb, const char* filename) {
+	if (block_nr == 0) {
+		return -ENOENT;
+	}
+	const int block_size = EXT2_BLOCK_SIZE(sb);
+	uint32_t* redir = malloc(block_size);
+	int res = pread(img, redir, block_size, block_size * block_nr);
+	if (res < 0) {
+		free(redir);
+		return -errno;
+	}
+	size_t MAX_REDIRECT_BLOCKS = block_size / sizeof(uint32_t);
+	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS && redir[i] != 0; ++i) {
+		if ((res = handle_ind_block(img, redir[i], sb, filename)) != -ENOENT) {
+			free(redir);
+			return res;
+		}
+	}
+	free(redir);
+	return -ENOENT;
+}
+
+
+int find_inode(int img, struct ext2_super_block* sb, int inode_nr, const char* path) {
+	int res;
+	struct ext2_inode inode;
+	char filename[EXT2_NAME_LEN + 1];
+	while (path[0] == '/') {
+		path = get_next_filename(path, filename);
+		assert(inode_nr > 0);
+		if ((res = get_inode(&inode, img, sb, inode_nr)) < 0) {
+			return res;
+		}
+		if (!S_ISDIR(inode.i_mode)) {
+			return -ENOTDIR;
+		}
+		bool found = false;
+		for (size_t i = 0; i < EXT2_NDIR_BLOCKS && inode.i_block[i] != 0; ++i) {
+			if ((res = handle_dir_block(img, inode.i_block[i], sb, filename)) >= 0) {
+				inode_nr = res;
+				found = true;
+				break;
+			} else if (res != -ENOENT) {
+				return res;
+			}
+		}
+		if (found) { continue; }
+		if ((res = handle_ind_block(img, inode.i_block[EXT2_IND_BLOCK], sb, filename)) >= 0) {
+			inode_nr = res;
+			continue;
+		} else if (res != -ENOENT) {
+			return res;
+		}
+		if ((res = handle_d_ind_block(img, inode.i_block[EXT2_DIND_BLOCK], sb, filename)) >= 0) {
+			return res;
+		}
+		inode_nr = res;
+	}
+	return inode_nr;
 }
 
 int dump_file(int img, const char *path, int out)

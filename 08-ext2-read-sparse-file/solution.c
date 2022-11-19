@@ -84,11 +84,13 @@ int handle_ind_block(size_t inode_nr, struct ext2_super_block* sb, int img, int 
 	uint32_t* redir = malloc(block_size);
 	int res = pread(img, redir, block_size, block_size * inode_nr);
 	if (res < 0) {
+		free(redir);
 		return -errno;
 	}
 	size_t MAX_REDIRECT_BLOCKS = block_size / sizeof(uint32_t);
 	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS && *remained_size > 0; ++i) {
 		if ((res = handle_direct_block(redir[i], sb, img, out, remained_size)) <= 0) {
+			free(redir);
 			return res;
 		}
 	}
@@ -101,11 +103,13 @@ int handle_d_ind_block(size_t inode_nr, struct ext2_super_block* sb, int img, in
 	uint32_t* redir = malloc(block_size);
 	int res = pread(img, redir, block_size, block_size * inode_nr);
 	if (res < 0) {
+		free(redir);
 		return -errno;
 	}
 	size_t MAX_REDIRECT_BLOCKS = block_size / sizeof(uint32_t);
 	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS && *remained_size > 0; ++i) {
 		if ((res = handle_ind_block(redir[i], sb, img, out, remained_size)) <= 0) {
+			free(redir);
 			return res;
 		}
 	}

@@ -438,6 +438,9 @@ bool btree_iter_next(struct btree_iter *i, int *x)
 	if (i == NULL || i->node == NULL || i->node->size == 0) {
 		return false;
 	}
+	if (i->node->size <= i->num) {
+		return false;
+	}
 	*x = i->node->elems[i->num];
 	++i->num;
 	if (i->num < i->node->size) {

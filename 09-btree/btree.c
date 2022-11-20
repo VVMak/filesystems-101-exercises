@@ -242,6 +242,7 @@ void fix_overflow(struct btree_node* node) {
 		right->elems[i] = node->elems[node->btree->L + 1 + i];
 		right->ptrs[i] = node->ptrs[node->btree->L + 1 + i];
 		if (right->ptrs[i]) {
+			right->ptrs[i]->parent = right;
 			right->ptrs[i]->parent_pos = i;
 		}
 		node->ptrs[node->btree->L + 1 + i] = NULL;
@@ -252,7 +253,10 @@ void fix_overflow(struct btree_node* node) {
 		assert(node != node->btree->root);
 		pos.node = node->parent;
 		pos.num = node->parent_pos + 1;
+		// printf("CHEEEEECK: %p, %p, %ld\n", node, pos.node, pos.num);
 		node_insert_simple(&pos, right->elems[0], right);
+		// printf("__________TEMP_________\n"); fflush(stdout);
+		// print_node(node->parent);
 		fix_overflow(node->parent);
 		return;
 	}
@@ -341,6 +345,8 @@ void node_insert(struct btree_node* node, int x) {
 		return;
 	}
 	node_insert_simple(&pos, x, NULL);
+	// printf("-------------------------AFTER\n");
+	// print_node(node);
 	fix_overflow(pos.node);
 }
 
@@ -387,7 +393,9 @@ void btree_insert(struct btree *t, int x)
 	if (t == NULL) {
 		return;
 	}
+	// print_node(t->root);
 	node_insert(t->root, x);
+	// print_node(t->root);
 }
 
 void btree_delete(struct btree *t, int x)

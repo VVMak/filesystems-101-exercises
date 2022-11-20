@@ -349,7 +349,7 @@ void node_insert(struct btree_node* node, int x) {
 
 bool node_contains(struct btree_node* node, int x) {
 	struct btree_iter pos = node_find(node, x);
-	return pos.node->elems[pos.num] == x;
+	return pos.num < pos.node->size && pos.node->elems[pos.num] == x;
 }
 
 void node_delete(struct btree_node* node, int x) {
@@ -438,7 +438,7 @@ bool btree_iter_next(struct btree_iter *i, int *x)
 	if (i == NULL || i->node == NULL || i->node->size == 0) {
 		return false;
 	}
-	if (i->node->size <= i->num) {
+	if (i->num >= i->node->size) {
 		return false;
 	}
 	*x = i->node->elems[i->num];

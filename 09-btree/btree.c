@@ -178,7 +178,7 @@ void node_insert_simple(struct btree_iter* iter, int x, struct btree_node* ptr) 
 		iter->node->elems[i] = iter->node->elems[i - 1];
 		iter->node->ptrs[i] = iter->node->ptrs[i - 1];
 		if (iter->node->ptrs[i]) {
-			iter->node->ptrs[i]->parent = iter->node;
+			// iter->node->ptrs[i]->parent = iter->node;
 			iter->node->ptrs[i]->parent_pos = i;
 		}
 	}
@@ -207,6 +207,7 @@ void node_delete_simple(struct btree_iter* iter) {
 		iter->node->elems[i] = iter->node->elems[i + 1];
 		iter->node->ptrs[i] = iter->node->ptrs[i + 1];
 		if (iter->node->ptrs[i]) {
+			// iter->node->ptrs[i]->parent = iter->node;
 			iter->node->ptrs[i]->parent_pos = i;
 		}
 	}
@@ -236,7 +237,7 @@ void fix_overflow(struct btree_node* node) {
 	right->btree = node->btree;
 	right->size = node->btree->L;
 	right->parent = node->parent;
-	right->right = node->right;
+	make_neighbours(right, node->right);
 	make_neighbours(node, right);
 	for (size_t i = 0; i < node->btree->L; ++i) {
 		right->elems[i] = node->elems[node->btree->L + 1 + i];
@@ -253,13 +254,11 @@ void fix_overflow(struct btree_node* node) {
 		assert(node != node->btree->root);
 		pos.node = node->parent;
 		pos.num = node->parent_pos + 1;
-		// printf("CHEEEEECK: %p, %p, %ld\n", node, pos.node, pos.num);
 		node_insert_simple(&pos, right->elems[0], right);
-		// printf("__________TEMP_________\n"); fflush(stdout);
-		// print_node(node->parent);
 		fix_overflow(node->parent);
 		return;
 	}
+	assert(node == node->btree->root);
 	pos.node = node_alloc(node->btree);
 	pos.num = 0;
 	node_insert_simple(&pos, node->elems[0], node);
@@ -287,11 +286,8 @@ void fix_underflow(struct btree_node* node) {
 	if (node->size == 0) {
 		pos.node = node->parent;
 		pos.num = node->parent_pos;
-		// printf("%p, %ld\n", pos.node, pos.num);
-		// print_node(pos.node);
+		make_neighbours(node->left, node->right);
 		node_delete_simple(&pos);
-		// printf("AFTER ANOTHER DELETE SIMPLE\n");
-		// print_node(pos.node);
 		fix_underflow(pos.node);
 		return;
 	}
@@ -330,6 +326,7 @@ void fix_underflow(struct btree_node* node) {
 	pos.node = node->parent;
 	assert(node->parent_pos + 1 == node->right->parent_pos);
 	pos.num = node->parent_pos + 1;
+	make_neighbours(node, node->right->right);
 	node_delete_simple(&pos);
 	fix_underflow(node->parent);
 }

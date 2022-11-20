@@ -358,7 +358,7 @@ void node_delete(struct btree_node* node, int x) {
 	}
 	struct btree_iter pos = node_find(node, x);
 	assert(pos.node);
-	if (pos.node->elems[pos.num] != x) {
+	if (pos.num >= pos.node->size || pos.node->elems[pos.num] != x) {
 		return;
 	}
 	node_delete_simple(&pos);

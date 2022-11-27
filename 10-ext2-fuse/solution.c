@@ -81,6 +81,7 @@ int handle_dir_block(uint32_t block_nr, struct ext2_super_block* sb, int* remain
 	int res = (*op_func)(block, size, op_info);
 	*remained -= size;
 	free(block);
+	// printf("V2\n"); fflush(stdout);
 	return res;
 }
 
@@ -97,6 +98,7 @@ int handle_ind_block(uint32_t block_nr, struct ext2_super_block* sb, int* remain
 	}
 	size_t MAX_REDIRECT_BLOCKS = block_size / sizeof(uint32_t);
 	for (size_t i = 0; i < MAX_REDIRECT_BLOCKS; ++i) {
+		// printf("block nr %d\n", redir[i]);
 		if ((res = handle_dir_block(redir[i], sb, remained, op_func, op_info)) != 0) {
 			free(redir);
 			return res;
@@ -244,16 +246,16 @@ struct read_info {
 
 int read_block(char* buf, int buf_size, void* read_block_info) {
 	struct read_info* info = read_block_info;
-	off_t offset = info->offset;
-	const int size = min(info->size, buf_size);
-	// printf("%ld %d\n", offset, size); fflush(stdout);
-	if (offset >= buf_size) {
+	// printf("offset: %ld, size: %ld, buf_size: %d\n", offset, info->size, buf_size); fflush(stdout);
+	const int size = min(info->size, buf_size - info->offset);
+	if (info->offset >= buf_size) {
+		info->offset -= buf_size;
 		return 0;
 	}
 	if (size <= 0) {
 		return 1;
 	}
-	memcpy(info->buf, buf + offset, size);
+	memcpy(info->buf, buf + info->offset, size);
 	info->offset = 0;
 	info->size -= size;
 	info->buf += size;
@@ -266,13 +268,16 @@ int read_inode(struct ext2_inode* inode, struct read_info* info) {
 	int res;
 	info->result = 0;
 	for (size_t i = 0; i < EXT2_NDIR_BLOCKS; ++i) {
+		// printf("direct %ld\n", i); fflush(stdout);
 		if ((res = handle_dir_block(inode->i_block[i], info->sb, &remained, read_block, info)) != 0) {
 			return res;
 		}
 	}
+	// printf("indirect\n"); fflush(stdout);
 	if ((res = handle_ind_block(inode->i_block[EXT2_IND_BLOCK], info->sb, &remained, read_block, info)) != 0) {
 		return res;
 	}
+	printf("double indirect\n"); fflush(stdout);
 	if ((res = handle_d_ind_block(inode->i_block[EXT2_DIND_BLOCK], info->sb, &remained, read_block, info)) != 0) {
 		return res;
 	}
@@ -281,7 +286,7 @@ int read_inode(struct ext2_inode* inode, struct read_info* info) {
 
 int my_read(const char* path, char* buf, size_t size, off_t offset,
 		     struct fuse_file_info* fi) {
-	// printf("read %s\n", path); fflush(stdout);
+	printf("read %s, offset %ld, size: %ld\n", path, offset, size); fflush(stdout);
 	(void)path;
 	struct ext2_super_block sb;
 	int res = read_sb(&sb);
@@ -290,7 +295,7 @@ int my_read(const char* path, char* buf, size_t size, off_t offset,
 	struct read_info read_info = {.buf = buf, .size = size, .offset = offset, .sb = &sb};
 	// printf("NODE: %ld\n", fi->fh); fflush(stdout);
 	if ((res = read_inode(&inode, &read_info)) < 0) { /* printf("out in %d with %d\n", __LINE__, res); fflush(stdout); */ return res; }
-	// printf("out in %d with %d\n", __LINE__, read_info.result); fflush(stdout);
+	printf("out in %d with %d\n", __LINE__, read_info.result); fflush(stdout);
 	return read_info.result;
 }
 

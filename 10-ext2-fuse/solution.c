@@ -277,7 +277,7 @@ int read_inode(struct ext2_inode* inode, struct read_info* info) {
 	if ((res = handle_ind_block(inode->i_block[EXT2_IND_BLOCK], info->sb, &remained, read_block, info)) != 0) {
 		return res;
 	}
-	printf("double indirect\n"); fflush(stdout);
+	// printf("double indirect\n"); fflush(stdout);
 	if ((res = handle_d_ind_block(inode->i_block[EXT2_DIND_BLOCK], info->sb, &remained, read_block, info)) != 0) {
 		return res;
 	}
@@ -286,7 +286,7 @@ int read_inode(struct ext2_inode* inode, struct read_info* info) {
 
 int my_read(const char* path, char* buf, size_t size, off_t offset,
 		     struct fuse_file_info* fi) {
-	printf("read %s, offset %ld, size: %ld\n", path, offset, size); fflush(stdout);
+	// printf("read %s, offset %ld, size: %ld\n", path, offset, size); fflush(stdout);
 	(void)path;
 	struct ext2_super_block sb;
 	int res = read_sb(&sb);
@@ -295,7 +295,7 @@ int my_read(const char* path, char* buf, size_t size, off_t offset,
 	struct read_info read_info = {.buf = buf, .size = size, .offset = offset, .sb = &sb};
 	// printf("NODE: %ld\n", fi->fh); fflush(stdout);
 	if ((res = read_inode(&inode, &read_info)) < 0) { /* printf("out in %d with %d\n", __LINE__, res); fflush(stdout); */ return res; }
-	printf("out in %d with %d\n", __LINE__, read_info.result); fflush(stdout);
+	// printf("out in %d with %d\n", __LINE__, read_info.result); fflush(stdout);
 	return read_info.result;
 }
 
@@ -316,7 +316,7 @@ int my_opendir(const char* path, struct fuse_file_info* fi)
 	if ((res = find_inode(&find_info)) < 0) { /* printf("out in %d with %d\n", __LINE__, res); fflush(stdout); */ return res; }
 	fi->fh = find_info.inode_nr;
 	struct ext2_inode inode;
-	if ((res = get_inode(&inode, &sb, fi->fh)) < 0) { printf("out in %d with %d\n", __LINE__, res); fflush(stdout); return res; }
+	if ((res = get_inode(&inode, &sb, fi->fh)) < 0) { /* printf("out in %d with %d\n", __LINE__, res); fflush(stdout); */ return res; }
 	if (!S_ISDIR(inode.i_mode)) {
 		// printf("out in %d with %d\n", __LINE__, -ENOTDIR); fflush(stdout); 
 		return -ENOTDIR;

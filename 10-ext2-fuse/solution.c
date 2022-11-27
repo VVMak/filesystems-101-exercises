@@ -340,8 +340,12 @@ int readdir_block(char* buf, int buf_size, void* readdir_block_info) {
 		struct stat st;
 		memset(&st, 0, sizeof(st));
 		st.st_ino = dir_entry->inode;
-		st.st_mode = (dir_entry->file_type == EXT2_FT_DIR ? S_IFDIR : S_IFREG);
-		info->filler(info->buf, filename, NULL, 0, 0);
+		if (dir_entry->file_type == EXT2_FT_DIR) {
+			st.st_mode = S_IFDIR | S_IRUSR | S_IRGRP | S_IROTH;
+		} else {
+			st.st_mode = S_IFREG | S_IRUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
+		}
+		info->filler(info->buf, filename, &st, 0, 0);
 		dir_entry = (struct ext2_dir_entry_2*)((char*)dir_entry + dir_entry->rec_len);
 	}
 	return 0;

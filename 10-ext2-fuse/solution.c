@@ -337,7 +337,10 @@ int readdir_block(char* buf, int buf_size, void* readdir_block_info) {
 		char* filename = malloc(dir_entry->name_len + 1);
 		memcpy(filename, dir_entry->name, dir_entry->name_len);
 		filename[dir_entry->name_len] = '\0';
-		// printf("%s\n", filename);
+		struct stat st;
+		memset(&st, 0, sizeof(st));
+		st.st_ino = dir_entry->inode;
+		st.st_mode = (dir_entry->file_type == EXT2_FT_DIR ? S_IFDIR : S_IFREG);
 		info->filler(info->buf, filename, NULL, 0, 0);
 		dir_entry = (struct ext2_dir_entry_2*)((char*)dir_entry + dir_entry->rec_len);
 	}

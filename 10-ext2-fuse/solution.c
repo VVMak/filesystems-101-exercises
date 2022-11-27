@@ -163,6 +163,7 @@ int block_find_inode(char* buf, int buf_size, void* find_inode_info) {
     }
 		dir_entry = (struct ext2_dir_entry_2*)((char*)dir_entry + dir_entry->rec_len);
 	}
+	info->inode_nr = 0;
 	return 0;
 }
 
@@ -210,6 +211,9 @@ int my_getattr(const char* path, struct stat* st, struct fuse_file_info* fi) {
 	if (res < 0) { /* printf("out in %d with %d\n", __LINE__, res); fflush(stdout); */ return res; }
 	struct find_inode_info find_info = {.path = path, .inode_nr = 2, .sb = &sb};
 	if ((res = find_inode(&find_info)) < 0) { /* printf("%s\n", path);  printf("out in %d with %d\n", __LINE__, res); fflush(stdout); */ return res; }
+	if (find_info.inode_nr == 0) {
+		return -ENOENT;
+	}
 	struct ext2_inode inode;
 	if ((res = get_inode(&inode, &sb, find_info.inode_nr)) < 0) { /* printf("out in %d with %d\n", __LINE__, res); fflush(stdout); */ return res; }
 	// st->st_mode = 0777;

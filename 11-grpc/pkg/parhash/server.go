@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	hashpb "fs101ex/pkg/gen/hashsvc"
 	parhashpb "fs101ex/pkg/gen/parhashsvc"
@@ -119,7 +120,7 @@ func (s *Server) ParallelHash(ctx context.Context, req *parhashpb.ParHashReq) (r
 		})
 		wg.Go(cur_ctx, func(ctx context.Context) error {
 			values, _ := ctx.Value(0).(ContextValues)
-			conn, err := grpc.Dial(values.backend)
+			conn, err := grpc.Dial(values.backend, grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				return err
 			}

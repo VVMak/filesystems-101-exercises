@@ -2,9 +2,16 @@ package parhash
 
 import (
 	"context"
+	"net"
+	"sync"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
+	"google.golang.org/grpc"
+
+	hashpb "fs101ex/pkg/gen/hashsvc"
+	parhashpb "fs101ex/pkg/gen/parhashsvc"
+	workgroup "fs101ex/pkg/workgroup"
 )
 
 type Config struct {
@@ -39,6 +46,10 @@ type Server struct {
 	conf Config
 
 	sem *semaphore.Weighted
+
+	l    net.Listener
+	wg   sync.WaitGroup
+	stop context.CancelFunc
 }
 
 func New(conf Config) *Server {
@@ -49,18 +60,87 @@ func New(conf Config) *Server {
 }
 
 func (s *Server) Start(ctx context.Context) (err error) {
-	defer func() { err = errors.Wrap(err, "Start()") }()
+	defer func() { err = errors.Wrapf(err, "Start()") }()
 
-	/* implement me */
+	s.l, err = net.Listen("tcp", s.conf.ListenAddr)
+	if err != nil {
+		return err
+	}
+
+	ctx, s.stop = context.WithCancel(ctx)
+
+	srv := grpc.NewServer()
+	parhashpb.RegisterParallelHashSvcServer(srv, s)
+
+	s.wg.Add(2)
+	go func() {
+		defer s.wg.Done()
+
+		srv.Serve(s.l)
+	}()
+	go func() {
+		defer s.wg.Done()
+
+		<-ctx.Done()
+		s.l.Close()
+	}()
 
 	return nil
 }
 
 func (s *Server) ListenAddr() string {
-	/* implement me */
-	return ""
+	return s.l.Addr().String()
 }
 
 func (s *Server) Stop() {
-	/* implement me */
+	s.stop()
+	s.wg.Wait()
+}
+
+type ContextValues struct {
+	data    []byte
+	result  *[]byte
+	backend string
+}
+
+type key int
+
+func (s *Server) ParallelHash(ctx context.Context, req *parhashpb.ParHashReq) (resp *parhashpb.ParHashResp, err error) {
+	backend := 0
+	wg := workgroup.New(workgroup.Config{Sem: s.sem})
+
+	result := make([][]byte, len(req.Data))
+
+	for i := range req.Data {
+		cur_ctx := context.WithValue(ctx, key(i), ContextValues{
+			data:    req.Data[i],
+			result:  &result[i],
+			backend: s.conf.BackendAddrs[i],
+		})
+		wg.Go(cur_ctx, func(ctx context.Context) error {
+			values, _ := ctx.Value(0).(ContextValues)
+			conn, err := grpc.Dial(values.backend)
+			if err != nil {
+				return err
+			}
+			defer conn.Close()
+			c := hashpb.NewHashSvcClient(conn)
+
+			backend_resp, err := c.Hash(ctx, &hashpb.HashReq{Data: values.data})
+			if err != nil {
+				return err
+			}
+			*values.result = backend_resp.Hash
+			return nil
+		})
+		backend += 1
+		if backend == len(s.conf.BackendAddrs) {
+			backend = 0
+		}
+	}
+	err = wg.Wait()
+	if err != nil {
+		return nil, err
+	}
+	return &parhashpb.ParHashResp{Hashes: result}, nil
 }

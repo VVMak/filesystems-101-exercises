@@ -97,14 +97,6 @@ func (s *Server) Stop() {
 	s.wg.Wait()
 }
 
-type ContextValues struct {
-	data    []byte
-	result  *[]byte
-	backend string
-}
-
-type key int
-
 func (s *Server) ParallelHash(ctx context.Context, req *parhashpb.ParHashReq) (resp *parhashpb.ParHashResp, err error) {
 	backend := 0
 	wg := workgroup.New(workgroup.Config{Sem: s.sem})
@@ -112,25 +104,22 @@ func (s *Server) ParallelHash(ctx context.Context, req *parhashpb.ParHashReq) (r
 	result := make([][]byte, len(req.Data))
 
 	for i := range req.Data {
-		cur_ctx := context.WithValue(ctx, key(i), ContextValues{
-			data:    req.Data[i],
-			result:  &result[i],
-			backend: s.conf.BackendAddrs[i],
-		})
-		wg.Go(cur_ctx, func(ctx context.Context) error {
-			values, _ := ctx.Value(0).(ContextValues)
-			conn, err := grpc.Dial(values.backend, grpc.WithInsecure())
+		data := req.Data[i]
+		result := &result[i]
+		backend_addr := s.conf.BackendAddrs[backend]
+		wg.Go(ctx, func(ctx context.Context) error {
+			conn, err := grpc.Dial(backend_addr, grpc.WithInsecure())
 			if err != nil {
 				return err
 			}
 			defer conn.Close()
 			c := hashpb.NewHashSvcClient(conn)
 
-			backend_resp, err := c.Hash(ctx, &hashpb.HashReq{Data: values.data})
+			backend_resp, err := c.Hash(ctx, &hashpb.HashReq{Data: data})
 			if err != nil {
 				return err
 			}
-			*values.result = backend_resp.Hash
+			*result = backend_resp.Hash
 			return nil
 		})
 		backend += 1

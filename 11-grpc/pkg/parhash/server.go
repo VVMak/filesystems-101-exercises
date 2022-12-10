@@ -47,9 +47,11 @@ type Server struct {
 
 	sem *semaphore.Weighted
 
-	l    net.Listener
-	wg   sync.WaitGroup
-	stop context.CancelFunc
+	l       net.Listener
+	wg      sync.WaitGroup
+	stop    context.CancelFunc
+	backend int
+	lock    sync.Mutex
 }
 
 func New(conf Config) *Server {
@@ -98,11 +100,15 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) ParallelHash(ctx context.Context, req *parhashpb.ParHashReq) (resp *parhashpb.ParHashResp, err error) {
-	backend := 0
+	s.lock.Lock()
+	backend := s.backend
+	s.backend += len(req.Data)
+	s.backend %= len(s.conf.BackendAddrs)
+	s.lock.Unlock()
+
 	wg := workgroup.New(workgroup.Config{Sem: s.sem})
 
 	result := make([][]byte, len(req.Data))
-
 	for i := range req.Data {
 		data := req.Data[i]
 		result := &result[i]
